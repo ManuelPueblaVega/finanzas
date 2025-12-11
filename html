@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Flujo de Caja Personal</title>
+    <!-- Tailwind CSS para diseño -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Iconos Phosphor -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- Chart.js para gráficos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        /* Scrollbar personalizado */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="text-slate-800 pb-20">
+
+    <!-- Header -->
+    <header class="bg-slate-900 text-white p-6 shadow-lg sticky top-0 z-30">
+        <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-blue-600 p-2 rounded-lg">
+                    <i class="ph-bold ph-wallet text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold">Flujo de Caja Pro</h1>
+                    <p class="text-slate-400 text-xs">Versión Local (Offline)</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <!-- Selector Año -->
+                <div class="flex items-center bg-slate-800 rounded-full p-1 shadow-inner select-none">
+                    <button onclick="changeYear(-1)" class="p-2 hover:bg-slate-700 rounded-full transition-colors">
+                        <i class="ph-bold ph-caret-left"></i>
+                    </button>
+                    <span id="currentYearDisplay" class="px-6 font-mono font-bold text-lg">2025</span>
+                    <button onclick="changeYear(1)" class="p-2 hover:bg-slate-700 rounded-full transition-colors">
+                        <i class="ph-bold ph-caret-right"></i>
+                    </button>
+                </div>
+
+                <!-- Botones de Datos -->
+                <div class="flex gap-2">
+                    <button onclick="exportData()" class="bg-slate-700 hover:bg-slate-600 p-2 rounded-lg text-white text-xs flex items-center gap-1" title="Guardar Copia de Seguridad">
+                        <i class="ph-bold ph-floppy-disk"></i> Guardar
+                    </button>
+                    <label class="bg-slate-700 hover:bg-slate-600 p-2 rounded-lg text-white text-xs flex items-center gap-1 cursor-pointer" title="Cargar Copia">
+                        <i class="ph-bold ph-upload-simple"></i> Cargar
+                        <input type="file" id="importFile" class="hidden" onchange="importData(this)">
+                    </label>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 mt-6 space-y-6">
+        
+        <!-- Tarjetas Resumen (KPIs) -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Ingresos -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between relative overflow-hidden">
+                <div class="relative z-10">
+                    <p class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Ingresos Anuales</p>
+                    <h3 id="kpiIncome" class="text-2xl font-bold text-emerald-600">$0</h3>
+                </div>
+                <div class="p-3 rounded-full bg-emerald-100 text-emerald-600 relative z-10">
+                    <i class="ph-bold ph-trend-up text-2xl"></i>
+                </div>
+            </div>
+
+            <!-- Egresos -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between relative overflow-hidden">
+                <div class="relative z-10">
+                    <p class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Egresos Anuales</p>
+                    <h3 id="kpiExpense" class="text-2xl font-bold text-rose-600">$0</h3>
+                </div>
+                <div class="p-3 rounded-full bg-rose-100 text-rose-600 relative z-10">
+                    <i class="ph-bold ph-trend-down text-2xl"></i>
+                </div>
+            </div>
+
+            <!-- Saldo -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between relative overflow-hidden">
+                <div class="relative z-10">
+                    <p class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Disponibilidad Real</p>
+                    <h3 id="kpiBalance" class="text-2xl font-bold text-blue-600">$0</h3>
+                </div>
+                <div class="p-3 rounded-full bg-blue-100 text-blue-600 relative z-10">
+                    <i class="ph-bold ph-money text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sección Gráfica -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Gráfico Principal -->
+            <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex items-center gap-2 mb-4">
+                    <i class="ph-bold ph-chart-bar text-slate-400"></i>
+                    <h3 class="font-bold text-slate-800">Tendencia Mensual</h3>
+                </div>
+                <div class="h-64">
+                    <canvas id="financeChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Top Gastos -->
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex items-center gap-2 mb-4">
+                    <i class="ph-bold ph-chart-pie-slice text-slate-400"></i>
+                    <h3 class="font-bold text-slate-800">Estructura de Gastos</h3>
+                </div>
+                <div id="categoryList" class="space-y-4">
+                    <!-- Se llena con JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabla Principal -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h3 class="font-bold text-slate-800">Detalle Operativo Mensual</h3>
+                <button onclick="exportCSV()" class="text-emerald-600 hover:text-emerald-700 text-sm font-medium flex items-center gap-1">
+                    <i class="ph-bold ph-file-csv"></i> Descargar Excel
+                </button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full min-w-[800px]">
+                    <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider font-semibold border-b border-slate-200">
+                        <tr>
+                            <th class="px-6 py-4 text-left">Periodo</th>
+                            <th class="px-6 py-4 text-right">Saldo Inicial</th>
+                            <th class="px-6 py-4 text-right text-emerald-700">Entradas</th>
+                            <th class="px-6 py-4 text-right text-rose-700">Salidas</th>
+                            <th class="px-6 py-4 text-right font-bold">Saldo Final</th>
+                            <th class="px-6 py-4 text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="monthTableBody" class="divide-y divide-slate-100">
+                        <!-- Se llena con JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- Botón Flotante Agregar -->
+    <button onclick="openModal()" class="fixed bottom-8 right-8 bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-xl shadow-blue-600/30 transition-transform hover:scale-105 active:scale-95 flex items-center gap-2 z-40">
+        <i class="ph-bold ph-plus text-xl"></i>
+        <span class="font-medium pr-2">Registrar</span>
+    </button>
+
+    <!-- Modal Registro -->
+    <div id="transactionModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4 backdrop-blur-sm fade-in">
+        <div class="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div class="bg-slate-900 px-6 py-4 flex justify-between items-center">
+                <h2 class="text-white font-semibold text-lg">Nuevo Movimiento</h2>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-white transition-colors">✕</button>
+            </div>
+            <form onsubmit="saveTransaction(event)" class="p-6 space-y-4">
+                <input type="hidden" id="transId">
+                
+                <div class="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-lg">
+                    <button type="button" onclick="setTransType('income')" id="btnIncome" class="py-2 rounded-md text-sm font-medium transition-all text-slate-500">Ingreso</button>
+                    <button type="button" onclick="setTransType('expense')" id="btnExpense" class="py-2 rounded-md text-sm font-medium transition-all text-slate-500">Egreso</button>
+                </div>
+                <input type="hidden" id="transType" value="expense">
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Mes</label>
+                    <select id="transMonth" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                        <!-- Meses JS -->
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Categoría</label>
+                    <input list="categories" id="transCategory" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ej. Arriendo, Sueldo..." required>
+                    <datalist id="categories">
+                        <option value="Sueldo"><option value="Arriendo"><option value="Alimentación"><option value="Transporte">
+                        <option value="Servicios"><option value="Ocio"><option value="Crédito"><option value="Otros">
+                    </datalist>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Monto ($)</label>
+                    <input type="number" id="transAmount" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-mono text-lg" placeholder="0" required>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Descripción</label>
+                    <input type="text" id="transDesc" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Detalle opcional...">
+                </div>
+
+                <button type="submit" class="w-full py-3 rounded-lg text-white font-medium mt-4 bg-blue-600 hover:bg-blue-700 shadow-lg">Guardar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Detalle Mes -->
+    <div id="detailModal" class="fixed inset-0 bg-white z-50 hidden overflow-y-auto fade-in">
+        <div class="max-w-4xl mx-auto px-4 py-8">
+            <button onclick="closeDetailModal()" class="flex items-center gap-2 text-slate-500 hover:text-slate-800 mb-6 font-medium">
+                <i class="ph-bold ph-arrow-left"></i> Volver al Tablero
+            </button>
+            
+            <h2 id="detailTitle" class="text-3xl font-bold text-slate-900 mb-6">Detalle Mes</h2>
+            
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <table class="w-full text-left">
+                    <thead class="bg-slate-50 text-slate-500 text-xs uppercase font-semibold">
+                        <tr>
+                            <th class="px-6 py-4">Tipo</th>
+                            <th class="px-6 py-4">Categoría</th>
+                            <th class="px-6 py-4">Descripción</th>
+                            <th class="px-6 py-4 text-right">Monto</th>
+                            <th class="px-6 py-4 text-center"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="detailTableBody" class="divide-y divide-slate-100">
+                        <!-- JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- LÓGICA DE LA APLICACIÓN ---
+        
+        const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'DICIEMBRE'];
+        let currentYear = new Date().getFullYear();
+        let transactions = [];
+        let chartInstance = null;
+
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', () => {
+            loadData();
+            initMonthSelect();
+            renderApp();
+        });
+
+        // Gestión de Datos (LocalStorage)
+        function loadData() {
+            const stored = localStorage.getItem('cashflow_data');
+            if (stored) {
+                transactions = JSON.parse(stored);
+            }
+        }
+
+        function saveData() {
+            localStorage.setItem('cashflow_data', JSON.stringify(transactions));
+            renderApp();
+        }
+
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(transactions));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "backup_flujo_caja.json");
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+        }
+
+        function importData(input) {
+            const file = input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    transactions = JSON.parse(e.target.result);
+                    saveData();
+                    alert('Datos cargados exitosamente');
+                } catch(e) {
+                    alert('Error al leer el archivo');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // Motor Financiero (Cálculo en cadena)
+        function calculateMonthlyData() {
+            let runningBalance = 0;
+            const yearTrans = transactions.filter(t => t.year === currentYear);
+            
+            return MONTHS.map((name, index) => {
+                const monthTrans = yearTrans.filter(t => t.month === index);
+                const income = monthTrans.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+                const expense = monthTrans.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+                
+                const start = runningBalance;
+                const end = start + income - expense;
+                runningBalance = end;
+
+                return { name, index, start, income, expense, end, transactions: monthTrans };
+            });
+        }
+
+        // Renderizado UI
+        function renderApp() {
+            document.getElementById('currentYearDisplay').textContent = currentYear;
+            const monthlyData = calculateMonthlyData();
+            
+            // KPIs
+            const totalIncome = monthlyData.reduce((acc, m) => acc + m.income, 0);
+            const totalExpense = monthlyData.reduce((acc, m) => acc + m.expense, 0);
+            const finalBalance = monthlyData[11].end;
+
+            document.getElementById('kpiIncome').textContent = formatMoney(totalIncome);
+            document.getElementById('kpiExpense').textContent = formatMoney(totalExpense);
+            document.getElementById('kpiBalance').textContent = formatMoney(finalBalance);
+
+            // Tabla
+            const tbody = document.getElementById('monthTableBody');
+            tbody.innerHTML = '';
+            monthlyData.forEach(m => {
+                const row = `
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="px-6 py-4 font-medium flex items-center gap-2">
+                            <span class="w-6 h-6 rounded bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">${m.index + 1}</span>
+                            ${m.name}
+                        </td>
+                        <td class="px-6 py-4 text-right font-mono text-slate-500 text-sm">${formatMoney(m.start)}</td>
+                        <td class="px-6 py-4 text-right font-mono text-emerald-600 font-medium">${m.income > 0 ? '+' : ''} ${formatMoney(m.income)}</td>
+                        <td class="px-6 py-4 text-right font-mono text-rose-600 font-medium">${m.expense > 0 ? '-' : ''} ${formatMoney(m.expense)}</td>
+                        <td class="px-6 py-4 text-right font-mono font-bold ${m.end >= 0 ? 'text-slate-800' : 'text-rose-600'}">${formatMoney(m.end)}</td>
+                        <td class="px-6 py-4 text-center">
+                            <button onclick="openDetailModal(${m.index})" class="text-blue-600 hover:text-blue-800 text-sm hover:underline">Ver Detalle</button>
+                        </td>
+                    </tr>
+                `;
+                tbody.insertAdjacentHTML('beforeend', row);
+            });
+
+            // Gráficos
+            updateChart(monthlyData);
+            updateCategories(yearTrans = transactions.filter(t => t.year === currentYear));
+        }
+
+        // Gráfico Chart.js
+        function updateChart(data) {
+            const ctx = document.getElementById('financeChart').getContext('2d');
+            if (chartInstance) chartInstance.destroy();
+
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.map(d => d.name.substring(0, 3)),
+                    datasets: [
+                        { label: 'Ingresos', data: data.map(d => d.income), backgroundColor: '#34d399', borderRadius: 4 },
+                        { label: 'Egresos', data: data.map(d => d.expense), backgroundColor: '#fb7185', borderRadius: 4 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, grid: { display: false } }, x: { grid: { display: false } } },
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+        }
+
+        function updateCategories(trans) {
+            const expenses = trans.filter(t => t.type === 'expense');
+            const totals = {};
+            let grandTotal = 0;
+            
+            expenses.forEach(t => {
+                totals[t.category] = (totals[t.category] || 0) + t.amount;
+                grandTotal += t.amount;
+            });
+
+            const sorted = Object.entries(totals).sort((a,b) => b[1] - a[1]).slice(0, 5);
+            const container = document.getElementById('categoryList');
+            container.innerHTML = '';
+
+            if (sorted.length === 0) container.innerHTML = '<p class="text-slate-400 text-sm italic">Sin datos aún</p>';
+
+            sorted.forEach(([cat, amount]) => {
+                const pct = Math.round((amount / grandTotal) * 100);
+                container.insertAdjacentHTML('beforeend', `
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="font-medium">${cat}</span>
+                            <span class="text-slate-500">${pct}% (${formatMoney(amount)})</span>
+                        </div>
+                        <div class="w-full bg-slate-100 rounded-full h-2">
+                            <div class="bg-blue-500 h-2 rounded-full" style="width: ${pct}%"></div>
+                        </div>
+                    </div>
+                `);
+            });
+        }
+
+        // Funciones Auxiliares
+        function formatMoney(amount) {
+            return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', minimumFractionDigits: 0 }).format(amount);
+        }
+
+        function changeYear(delta) {
+            currentYear += delta;
+            renderApp();
+        }
+
+        function initMonthSelect() {
+            const select = document.getElementById('transMonth');
+            MONTHS.forEach((m, i) => {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.textContent = m;
+                select.appendChild(opt);
+            });
+        }
+
+        // Modal Lógica
+        function openModal(monthIndex = new Date().getMonth()) {
+            document.getElementById('transactionModal').classList.replace('hidden', 'flex');
+            document.getElementById('transMonth').value = monthIndex;
+            setTransType('expense');
+            document.getElementById('transAmount').value = '';
+            document.getElementById('transCategory').value = '';
+            document.getElementById('transDesc').value = '';
+        }
+
+        function closeModal() {
+            document.getElementById('transactionModal').classList.replace('flex', 'hidden');
+        }
+
+        function setTransType(type) {
+            document.getElementById('transType').value = type;
+            const btnInc = document.getElementById('btnIncome');
+            const btnExp = document.getElementById('btnExpense');
+            
+            if (type === 'income') {
+                btnInc.className = "py-2 rounded-md text-sm font-medium transition-all bg-white text-emerald-600 shadow-sm";
+                btnExp.className = "py-2 rounded-md text-sm font-medium transition-all text-slate-500 hover:text-slate-700";
+            } else {
+                btnExp.className = "py-2 rounded-md text-sm font-medium transition-all bg-white text-rose-600 shadow-sm";
+                btnInc.className = "py-2 rounded-md text-sm font-medium transition-all text-slate-500 hover:text-slate-700";
+            }
+        }
+
+        function saveTransaction(e) {
+            e.preventDefault();
+            const type = document.getElementById('transType').value;
+            const month = parseInt(document.getElementById('transMonth').value);
+            const category = document.getElementById('transCategory').value;
+            const amount = parseFloat(document.getElementById('transAmount').value);
+            const desc = document.getElementById('transDesc').value;
+
+            const newTrans = {
+                id: Date.now(),
+                year: currentYear,
+                month,
+                type,
+                category,
+                amount,
+                desc
+            };
+
+            transactions.push(newTrans);
+            saveData();
+            closeModal();
+            // Si el modal de detalle está abierto, refrescarlo
+            if (!document.getElementById('detailModal').classList.contains('hidden')) {
+                openDetailModal(month);
+            }
+        }
+
+        function deleteTransaction(id) {
+            if(!confirm('¿Eliminar registro?')) return;
+            transactions = transactions.filter(t => t.id !== id);
+            saveData();
+            // Refrescar modal detalle si está abierto
+            const detailTitle = document.getElementById('detailTitle').textContent;
+            // Hack rápido para saber en qué mes estamos
+            const monthName = detailTitle.split(' ')[1]; 
+            const monthIdx = MONTHS.indexOf(monthName);
+            if (monthIdx !== -1) openDetailModal(monthIdx);
+        }
+
+        // Detalle Mes
+        function openDetailModal(monthIndex) {
+            const data = calculateMonthlyData()[monthIndex];
+            document.getElementById('detailTitle').textContent = `Detalle ${data.name} ${currentYear}`;
+            document.getElementById('detailModal').classList.remove('hidden');
+            
+            const tbody = document.getElementById('detailTableBody');
+            tbody.innerHTML = '';
+            
+            if (data.transactions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-slate-400">Sin movimientos</td></tr>';
+            } else {
+                data.transactions.forEach(t => {
+                    tbody.insertAdjacentHTML('beforeend', `
+                        <tr class="hover:bg-slate-50 group">
+                            <td class="px-6 py-4"><span class="px-2 py-1 rounded-full text-xs font-bold ${t.type === 'income' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">${t.type === 'income' ? 'Ingreso' : 'Egreso'}</span></td>
+                            <td class="px-6 py-4 font-medium">${t.category}</td>
+                            <td class="px-6 py-4 text-slate-500 text-sm">${t.desc || '-'}</td>
+                            <td class="px-6 py-4 text-right font-mono ${t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}">${formatMoney(t.amount)}</td>
+                            <td class="px-6 py-4 text-center">
+                                <button onclick="deleteTransaction(${t.id})" class="text-slate-300 hover:text-rose-600"><i class="ph-bold ph-trash"></i></button>
+                            </td>
+                        </tr>
+                    `);
+                });
+            }
+            
+            // Botón flotante ahora abre para este mes específico
+            document.querySelector("button[onclick='openModal()']").setAttribute('onclick', `openModal(${monthIndex})`);
+        }
+
+        function closeDetailModal() {
+            document.getElementById('detailModal').classList.add('hidden');
+            document.querySelector("button[onclick^='openModal']").setAttribute('onclick', `openModal()`);
+            renderApp(); // Refrescar tablero principal
+        }
+
+        function exportCSV() {
+            const rows = [['Año', 'Mes', 'Tipo', 'Categoría', 'Descripción', 'Monto']];
+            transactions.forEach(t => {
+                rows.push([t.year, MONTHS[t.month], t.type, t.category, t.desc, t.amount]);
+            });
+            
+            const csvContent = "data:text/csv;charset=utf-8," 
+                + rows.map(e => e.join(";")).join("\n");
+                
+            const link = document.createElement("a");
+            link.setAttribute("href", encodeURI(csvContent));
+            link.setAttribute("download", "flujo_caja_completo.csv");
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        }
+
+    </script>
+</body>
+</html>
